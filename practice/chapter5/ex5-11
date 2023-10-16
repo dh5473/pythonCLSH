@@ -1,0 +1,9 @@
+#!/bin/bash
+
+CMD=ps
+OPTS=-ef
+
+# ps -ef 실행
+eval "$CMD $OPTS"
+
+echo END
