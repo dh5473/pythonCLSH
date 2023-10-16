@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# $$ -> 현재 스크립트의 PID
+# $? -> 최근 실행된 명령어, 함수, 스크립트 자식의 종료 상태
+# $! -> 최근 실행한 백그라운드(비동기) 명령의 PID
+echo $$
+
+# SHELL과 PID 다름
+ls -l /proc/self
+
+# ls 명령 실행 후 echo 실행
+echo END

@@ -1,0 +1,10 @@
+#!bin/bash
+
+# $$ -> 현재 스크립트의 PID
+echo $$
+
+# SHELL과 PID 같음
+exec ls -l /proc/self
+
+# ls 명령으로 치환되어 echo 실행안됨
+echo END
