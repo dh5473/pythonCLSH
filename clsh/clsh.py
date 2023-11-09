@@ -46,12 +46,9 @@ def main(
                     print("--hostfile option is not provided. Please provide a hostfile.")
                     exit(1)
 
-    if i:
-        pass
-
-    else:
-        ssh_nodes = connection.SSHconnector(hosts)
-        ssh_nodes.excute_ssh_process(ctx.args)
+    ssh_nodes = connection.SSHConnector(hosts)
+    if i: ssh_nodes.recv_commands()
+    else: ssh_nodes.excute_ssh_process(ctx.args)
 
 
     typer.echo(f"-i: {i}")
