@@ -2,7 +2,7 @@ import os
 import typer
 from typing_extensions import Annotated
 
-import connection
+import ssh
 
 app = typer.Typer()
 
@@ -46,9 +46,16 @@ def main(
                     print("--hostfile option is not provided. Please provide a hostfile.")
                     exit(1)
 
-    ssh_nodes = connection.SSHConnector(hosts)
-    if i: ssh_nodes.recv_commands()
-    else: ssh_nodes.excute_ssh_process(ctx.args)
+    nodes = []
+    for host in hosts:
+        node = ssh.SSHClient(host, 22, 'ubuntu', 'ubuntu')
+        node.connect()
+        nodes.append(node)
+    
+    node_manager = ssh.SSHClientManager(nodes)
+
+    if i: node_manager.interactive_mode()
+    else: node_manager.execute_multi(ctx.args)
 
 
     typer.echo(f"-i: {i}")
