@@ -1,7 +1,9 @@
 import paramiko
+import subprocess
 import multiprocessing
 
-from typing import List
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Tuple
 from paramiko import Channel, Transport
 
 
@@ -46,17 +48,22 @@ class SSHClientManager:
 
     def execute_multi(self, command):
         def execute(node: SSHClient):
-            stdout = node.client.exec_command(command)[1]
-            print(stdout)
+            cmd = " ".join(command)
+            _, stdout, _ = node.client.exec_command(cmd)
+            output = stdout.read().decode('utf-8')
+            print(f"{node.host}:{node.host_port}:", end=" ")
+            print(output)
             # error 처리 추가
             return True
         
-        with multiprocessing.Pool() as pool:
-            result = pool.map(execute, self.clients)
-
+        # 직렬화 문제로 멀티 프로세스 불가
+        with ThreadPoolExecutor() as executor:
+            result = list(executor.map(execute, self.clients))
+        
     def channel_execute_multi(self, command):
         # 추후 해결...
-        def execute(index, channel: Channel):
+        def execute(args: Tuple[int, Channel]):
+            index, channel = args
             channel.send(command)
 
             output = ""
@@ -74,51 +81,66 @@ class SSHClientManager:
             # error 처리 추가
             return True
         
-        with multiprocessing.Pool() as pool:
-            result = pool.map_async(execute, enumerate(self.channels))
-            result.wait()
+        with ThreadPoolExecutor() as executor:
+            result = list(executor.map(execute, enumerate(self.channels)))
 
     def connect_channel(self):
         for node in self.clients:
             channel = node.client.invoke_shell()
             transport = node.client.get_transport()
 
-            self.hosts.append(node.host)
+            self.hosts.append(f"{node.host}:{node.host_port}")
             self.channels.append(channel)
             self.transports.append(transport)
 
     def disconnect_channel(self):
-        # channel 연결 끊기
-        pass
+        for node in self.clients:
+            node.client.close()
 
     def sentinel(self):
-        while True:
-            for transport in self.transports:
+        error_flag = 0
+        while not error_flag:
+            if error_flag: break
+            for index, transport in enumerate(self.transports):
                 if transport.is_active():
                     pass
                 else:
-                    # 에러 처리
+                    print(f"ERROR: {self.hosts[index]} connection lost")
+                    self.disconnect_channel()
+                    error_flag = 1
                     break
 
     def interactive_mode(self):
         print("Enter 'quit' to leave this interactive mode")
-        print(f"Working with nodes: {', '.join([node.host for node in self.clients])}")
+        print(f"Working with nodes: {', '.join([f'{node.host}:{node.host_port}' for node in self.clients])}")
 
         self.connect_channel()
 
-        sentinel_process = multiprocessing.Process(target=self.sentinel)
-        sentinel_process.start()
+        # sentinel_process = multiprocessing.Process(target=self.sentinel)
+        # sentinel_process.start()
 
         while True:
             command = input("clsh> ")
 
             if command == "quit": 
                 break
+            
+            print("-" * 20)
+            
+            if command[0] == "!":
+                try:
+                    result = subprocess.run(command[1:], 
+                                            capture_output=True,
+                                            text=True)
+                    print("LOCAL: ", end="")
+                    print(result.stdout)
+                except:
+                    print("Error!")
+            else:
+                self.channel_execute_multi(command)
 
-            print("-" * 10)
-            self.channel_execute_multi(command)
-            print("-" * 10)
+            print("-" * 20)
 
         self.disconnect_channel()
 
-        sentinel_process.terminate()
+        # sentinel_process.terminate()
