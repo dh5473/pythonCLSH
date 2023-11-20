@@ -48,7 +48,12 @@ def main(
 
     nodes = []
     for host in hosts:
-        node = ssh.SSHClient(host, 22, 'ubuntu', 'ubuntu')
+        try:
+            host, port = host.split(":")
+        except:
+            host, port = host, 22
+
+        node = ssh.SSHClient(host, port, 'ubuntu', 'ubuntu')
         node.connect()
         nodes.append(node)
     
@@ -58,11 +63,11 @@ def main(
     else: node_manager.execute_multi(ctx.args)
 
 
-    typer.echo(f"-i: {i}")
-    typer.echo(f"--out: {out}")
-    typer.echo(f"--err: {err}")
-    for extra_arg in ctx.args:
-        print(f"Got extra arg: {extra_arg}")
+    # typer.echo(f"-i: {i}")
+    # typer.echo(f"--out: {out}")
+    # typer.echo(f"--err: {err}")
+    # for extra_arg in ctx.args:
+    #     print(f"Got extra arg: {extra_arg}")
 
 
 if __name__ == "__main__":
