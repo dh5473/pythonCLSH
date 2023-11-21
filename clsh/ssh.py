@@ -1,5 +1,9 @@
+import os
+import time
+import signal
 import paramiko
 import subprocess
+import threading
 import multiprocessing
 
 from concurrent.futures import ThreadPoolExecutor
@@ -52,7 +56,7 @@ class SSHClientManager:
             _, stdout, _ = node.client.exec_command(cmd)
             output = stdout.read().decode('utf-8')
             print(f"{node.host}:{node.host_port}:", end=" ")
-            print(output)
+            print(output, end="")
             # error 처리 추가
             return True
         
@@ -64,19 +68,17 @@ class SSHClientManager:
         # 추후 해결...
         def execute(args: Tuple[int, Channel]):
             index, channel = args
-            channel.send(command)
+            cmd = command + "\n"
+            channel.send(cmd)
+            time.sleep(0.1)
 
             output = ""
             channel.settimeout(5)
-            while True:
-                try:
-                    output += channel.recv(1024).decode("utf-8")
-                    if output:
-                        break
-                except:
-                    pass
+            while channel.recv_ready():
+                output += channel.recv(1024).decode('utf-8')
 
             print(f"{self.hosts[index]}: {output}")
+
             channel.settimeout(60)
             # error 처리 추가
             return True
@@ -94,8 +96,14 @@ class SSHClientManager:
             self.transports.append(transport)
 
     def disconnect_channel(self):
-        for node in self.clients:
-            node.client.close()
+        for client, channel, transport in zip(self.clients, self.channels, self.transports):
+            transport.close()
+            channel.close()
+            client.client.close()
+
+        self.clients = []
+        self.channels = []
+        self.transports = []
 
     def sentinel(self):
         error_flag = 0
@@ -107,9 +115,11 @@ class SSHClientManager:
                 else:
                     print(f"ERROR: {self.hosts[index]} connection lost")
                     self.disconnect_channel()
-                    error_flag = 1
-                    break
 
+                    curr_pid = os.getpid()
+                    os.kill(curr_pid, signal.SIGTERM)
+                    break
+    
     def interactive_mode(self):
         print("Enter 'quit' to leave this interactive mode")
         print(f"Working with nodes: {', '.join([f'{node.host}:{node.host_port}' for node in self.clients])}")
@@ -119,8 +129,14 @@ class SSHClientManager:
         # sentinel_process = multiprocessing.Process(target=self.sentinel)
         # sentinel_process.start()
 
+        sentinel_thread = threading.Thread(target=self.sentinel)
+        sentinel_thread.start()
+
         while True:
             command = input("clsh> ")
+            if len(command) < 1:
+                print("Please re-enter the command")
+                continue
 
             if command == "quit": 
                 break
@@ -144,3 +160,4 @@ class SSHClientManager:
         self.disconnect_channel()
 
         # sentinel_process.terminate()
+        sentinel_thread.join()
