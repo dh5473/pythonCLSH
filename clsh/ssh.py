@@ -1,14 +1,14 @@
 import os
+import re
 import time
 import signal
 import paramiko
 import subprocess
 import threading
-import multiprocessing
 
-from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 from paramiko import Channel, Transport
+from concurrent.futures import ThreadPoolExecutor
 
 
 class SSHClient:
@@ -45,6 +45,7 @@ class SSHClientManager:
         clients: List[SSHClient]
     ):
         self.clients = clients
+        self.sentinel_flag = True
 
         self.hosts = []
         self.channels: List[Channel] = []
@@ -57,30 +58,29 @@ class SSHClientManager:
             output = stdout.read().decode('utf-8')
             print(f"{node.host}:{node.host_port}:", end=" ")
             print(output, end="")
-            # error 처리 추가
+
             return True
         
-        # 직렬화 문제로 멀티 프로세스 불가
         with ThreadPoolExecutor() as executor:
             result = list(executor.map(execute, self.clients))
         
-    def channel_execute_multi(self, command):
-        # 추후 해결...
+    def channel_execute_multi(self, command, check=False):
         def execute(args: Tuple[int, Channel]):
             index, channel = args
             cmd = command + "\n"
-            channel.send(cmd)
-            time.sleep(0.1)
+            channel.settimeout(5.0)
+            channel.sendall(cmd)
+            time.sleep(0.2)
 
             output = ""
-            channel.settimeout(5)
             while channel.recv_ready():
                 output += channel.recv(1024).decode('utf-8')
+            
+            result = re.sub(r'^.*?\$', '', output, flags=re.MULTILINE)
 
-            print(f"{self.hosts[index]}: {output}")
+            if not check:
+                print(f"{self.hosts[index]}: {result}")
 
-            channel.settimeout(60)
-            # error 처리 추가
             return True
         
         with ThreadPoolExecutor() as executor:
@@ -106,19 +106,18 @@ class SSHClientManager:
         self.transports = []
 
     def sentinel(self):
-        error_flag = 0
-        while not error_flag:
-            if error_flag: break
+        while True:
+            if not self.sentinel_flag: 
+                return True
+            
+            time.sleep(0.5)
             for index, transport in enumerate(self.transports):
-                if transport.is_active():
-                    pass
-                else:
+                if not transport.is_active():
                     print(f"ERROR: {self.hosts[index]} connection lost")
                     self.disconnect_channel()
 
-                    curr_pid = os.getpid()
-                    os.kill(curr_pid, signal.SIGTERM)
-                    break
+                    pid = os.getpid()
+                    os.kill(pid, signal.SIGTERM)
     
     def interactive_mode(self):
         print("Enter 'quit' to leave this interactive mode")
@@ -126,11 +125,10 @@ class SSHClientManager:
 
         self.connect_channel()
 
-        # sentinel_process = multiprocessing.Process(target=self.sentinel)
-        # sentinel_process.start()
-
         sentinel_thread = threading.Thread(target=self.sentinel)
         sentinel_thread.start()
+
+        self.channel_execute_multi("", check=True)
 
         while True:
             command = input("clsh> ")
@@ -138,7 +136,8 @@ class SSHClientManager:
                 print("Please re-enter the command")
                 continue
 
-            if command == "quit": 
+            if command.lower() == "quit" or command.lower() == "exit":
+                self.sentinel_flag = False
                 break
             
             print("-" * 20)
@@ -158,6 +157,4 @@ class SSHClientManager:
             print("-" * 20)
 
         self.disconnect_channel()
-
-        # sentinel_process.terminate()
         sentinel_thread.join()
