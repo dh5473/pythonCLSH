@@ -1,8 +1,17 @@
 import os
+import signal
 import typer
 from typing_extensions import Annotated
 
 import ssh
+import utils
+
+
+def handler(signum, frame):
+    print(f"Received signal: {signum}")
+    pid = os.getpid()
+    os.kill(pid, signal.SIGTERM)
+
 
 app = typer.Typer()
 
@@ -17,34 +26,10 @@ def main(
     out: Annotated[str, typer.Option()] = "",
     err: Annotated[str, typer.Option()] = "",
 ):
-    # EAFP: Easier to Ask Forgiveness than Permission
-    try:
-        with open(hostfile, 'r') as file:
-            hosts = file.read().splitlines()
-    except:
-        try:
-            hosts_env = os.environ['CLSH_HOSTS']
-            hosts = list(hosts_env.split(":"))
-
-        except:
-            try:
-                hostfile_env = os.environ['CLSH_HOSTFILE']
-                
-                if not os.path.isabs(hostfile_env):
-                    cwd = os.getcwd()
-                    hostfile_env = os.path.abspath(os.path.join(cwd, hostfile_env))
-
-                with open(hostfile_env, 'r') as file:
-                    hosts = file.read().splitlines()
-
-            except:
-                try:
-                    with open("./hostfile", 'r') as file:
-                        hosts = file.read().splitlines()
-
-                except:
-                    print("--hostfile option is not provided. Please provide a hostfile.")
-                    exit(1)
+    signal.signal(signal.SIGTERM, handler)
+    signal.signal(signal.SIGINT, handler)
+    
+    hosts = utils.check_hostfile(hostfile)
 
     nodes = []
     for host in hosts:
