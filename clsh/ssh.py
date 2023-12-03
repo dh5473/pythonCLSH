@@ -72,7 +72,10 @@ class SSHClientManager:
             out_context = f"{node.host}:{node.host_port}: {output}"
             err_context = f"{node.host}:{node.host_port}: {error}"
             
-            print(out_context, end="")
+            if output:
+                print(out_context, end="")
+            else: 
+                print(err_context, end="")
 
             if self.out_logger:
                 self.out_logger.info(out_context)
