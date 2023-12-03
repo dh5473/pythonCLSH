@@ -3,14 +3,8 @@ import signal
 import typer
 from typing_extensions import Annotated
 
-import ssh
-import utils
-
-
-def handler(signum, frame):
-    print(f"Received signal: {signum}")
-    pid = os.getpid()
-    os.kill(pid, signal.SIGTERM)
+from ssh import SSHClient, SSHClientManager
+from utils import check_hostfile, handler
 
 
 app = typer.Typer()
@@ -29,7 +23,10 @@ def main(
     signal.signal(signal.SIGTERM, handler)
     signal.signal(signal.SIGINT, handler)
     
-    hosts = utils.check_hostfile(hostfile)
+    if h:
+        hosts = h.split(",")
+    else:
+        hosts = check_hostfile(hostfile)
 
     nodes = []
     for host in hosts:
@@ -38,21 +35,19 @@ def main(
         except:
             host, port = host, 22
 
-        node = ssh.SSHClient(host, port, 'ubuntu', 'ubuntu')
-        node.connect()
-        nodes.append(node)
+        node = SSHClient(host, port, 'ubuntu', 'ubuntu')
+        try:
+            node.connect()
+            nodes.append(node)
+        except Exception as e:
+            print("Check your host: ", e)
     
-    node_manager = ssh.SSHClientManager(nodes)
+    node_manager = SSHClientManager(nodes, 
+                                    out_path=out, 
+                                    err_path=err)
 
     if i: node_manager.interactive_mode()
     else: node_manager.execute_multi(ctx.args)
-
-
-    # typer.echo(f"-i: {i}")
-    # typer.echo(f"--out: {out}")
-    # typer.echo(f"--err: {err}")
-    # for extra_arg in ctx.args:
-    #     print(f"Got extra arg: {extra_arg}")
 
 
 if __name__ == "__main__":
