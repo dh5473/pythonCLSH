@@ -10,6 +10,9 @@ from typing import List, Tuple
 from paramiko import Channel, Transport
 from concurrent.futures import ThreadPoolExecutor
 
+from log_handler import Logger
+from utils import check_log_file
+
 
 class SSHClient:
     def __init__(
@@ -42,22 +45,40 @@ class SSHClient:
 class SSHClientManager:
     def __init__(
         self,
-        clients: List[SSHClient]
+        clients: List[SSHClient],
+        out_path: str,
+        err_path: str
     ):
         self.clients = clients
         self.sentinel_flag = True
+        self.out_logger = None
+        self.err_logger = None
 
         self.hosts = []
         self.channels: List[Channel] = []
         self.transports: List[Transport] = []
 
+        if check_log_file(out_path): self.out_logger = Logger(out_path)
+        if check_log_file(err_path): self.err_logger = Logger(err_path)
+
     def execute_multi(self, command):
         def execute(node: SSHClient):
             cmd = " ".join(command)
-            _, stdout, _ = node.client.exec_command(cmd)
+            _, stdout, stderr = node.client.exec_command(cmd)
+
             output = stdout.read().decode('utf-8')
-            print(f"{node.host}:{node.host_port}:", end=" ")
-            print(output, end="")
+            error = stderr.read().decode('utf-8')
+
+            out_context = f"{node.host}:{node.host_port}: {output}"
+            err_context = f"{node.host}:{node.host_port}: {error}"
+            
+            print(out_context, end="")
+
+            if self.out_logger:
+                self.out_logger.info(out_context)
+            
+            if self.err_logger:
+                self.err_logger.error(err_context)
 
             return True
         
@@ -79,7 +100,7 @@ class SSHClientManager:
             result = re.sub(r'^.*?\$', '', output, flags=re.MULTILINE)
 
             if not check:
-                print(f"{self.hosts[index]}: {result}")
+                print(f"{self.hosts[index]}: {result}", end="")
 
             return True
         
@@ -90,7 +111,7 @@ class SSHClientManager:
         for node in self.clients:
             channel = node.client.invoke_shell()
             transport = node.client.get_transport()
-
+            
             self.hosts.append(f"{node.host}:{node.host_port}")
             self.channels.append(channel)
             self.transports.append(transport)
@@ -128,7 +149,11 @@ class SSHClientManager:
         sentinel_thread = threading.Thread(target=self.sentinel)
         sentinel_thread.start()
 
-        self.channel_execute_multi("", check=True)
+        try:
+            self.channel_execute_multi("", check=True)
+        except Exception as e:
+            self.sentinel_flag = False
+            print(e)
 
         while True:
             command = input("clsh> ")
@@ -142,18 +167,19 @@ class SSHClientManager:
             
             print("-" * 20)
             
-            if command[0] == "!":
-                try:
+            try:
+                if command[0] == "!":
                     result = subprocess.run(command[1:], 
                                             capture_output=True,
                                             text=True)
                     print("LOCAL: ", end="")
                     print(result.stdout)
-                except:
-                    print("Error!")
-            else:
-                self.channel_execute_multi(command)
-
+                else:
+                    self.channel_execute_multi(command)
+            except Exception as e:
+                self.sentinel_flag = False
+                print(e)
+        
             print("-" * 20)
 
         self.disconnect_channel()
