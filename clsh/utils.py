@@ -1,4 +1,5 @@
 import os
+import signal
 
 
 def check_hostfile(hostfile):
@@ -30,3 +31,19 @@ def check_hostfile(hostfile):
                     print("--hostfile option is not provided. Please provide a hostfile.")
                     exit(1)
     return hosts
+
+
+def check_log_file(file_path):
+    if not file_path:
+        return False
+    if os.path.isfile(file_path):
+        return True
+    else:
+        print(f"Log file not found: {file_path}")
+        return False
+
+
+def handler(signum, frame):
+    print(f"Received signal: {signum}")
+    pid = os.getpid()
+    os.kill(pid, signal.SIGTERM)
