@@ -25,7 +25,7 @@ cd clsh
 python clsh.py cat /proc/loadavg
 ```
 
-Interactive mode allows sending commands. if any node connection is lost, other nodes also stop and process will terminal. To exit, input 'quit' or 'exit'.
+Interactive mode allows sending commands. If any node connection is lost, other nodes also stop and process will be terminated. To exit, input 'quit' or 'exit'.
 ```
 python clsh.py -i
 ```
