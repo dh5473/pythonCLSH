@@ -1,4 +1,3 @@
-import os
 import signal
 import typer
 from typing_extensions import Annotated
@@ -14,11 +13,11 @@ app = typer.Typer()
 )
 def main(
     ctx: typer.Context,
-    hostfile: Annotated[str, typer.Option()] = "",
-    h: Annotated[str, typer.Option("-h")] = "",
-    i: Annotated[bool, typer.Option("-i")] = False,
-    out: Annotated[str, typer.Option()] = "",
-    err: Annotated[str, typer.Option()] = "",
+    hostfile: Annotated[str, typer.Option(help="hostfile path")] = "",
+    h: Annotated[str, typer.Option("-h", help="host name(ip:port)")] = "",
+    i: Annotated[bool, typer.Option("-i", help="interactive mode")] = False,
+    out: Annotated[str, typer.Option(help="log file path for output")] = "",
+    err: Annotated[str, typer.Option(help="log file path for error")] = "",
 ):
     signal.signal(signal.SIGTERM, handler)
     signal.signal(signal.SIGINT, handler)
@@ -34,7 +33,7 @@ def main(
             host, port = host.split(":")
         except:
             host, port = host, 22
-
+        # change username and password (using os.environ for safety)
         node = SSHClient(host, port, 'ubuntu', 'ubuntu')
         try:
             node.connect()
